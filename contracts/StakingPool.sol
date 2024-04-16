@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.8.13;
 
-
 interface IVault {
     function withdrawValut(uint256 amount) external;
 }
@@ -49,7 +48,7 @@ contract StakingPool {
     address VAULT_CONTRACT_ADDRESS;
 
     // The amount of ETH withdrawn from Valut to current contract
-    event RewardsReceived(uint256 amountOfETH, uint256 timestamp);
+    event RewardsReceived(uint256 amount, uint256 timestamp);
 
     event Deposited(address indexed sender, uint256 amountOfETH, uint256 amountOfShares, uint256 timestamp);
     event BeaconChainDepositEvent(
@@ -73,7 +72,7 @@ contract StakingPool {
         require(msg.value > 0, "ZERO_DEPOSIT");
         return _deposit(msg.sender, msg.value);
     }
-    
+
     function _deposit(address account, uint256 amount) internal returns (uint256)  {
         uint256 amountOfShares = _getSharesByETHAmount(amount);
         shares[account] += amountOfShares;
@@ -127,21 +126,17 @@ contract StakingPool {
         // collect funds from vault
         VAULT_CONTRACT_ADDRESS = vaultAddress;
         IVault VAULT_CONTRACT = IVault(vaultAddress);
-        if (rewards + refund > 0) {
-            // 从vault合约提款
-            VAULT_CONTRACT.withdrawValut(rewards + refund);
-        }
+        // 从vault合约提款
+        VAULT_CONTRACT.withdrawValut(rewards + refund);
 
         // 记账
         pool.totalRewards += rewards;
         pool.availableFunds += rewards + refund;
-        pool.lastRewardTime = block.timestamp; // 更新收益时间
 
         uint256 ethToLock = _finalize();
         // 记账
         pool.ethToLock += ethToLock;
         pool.availableFunds -= ethToLock;
-        pool.totalRedeemed += ethToLock;
     }
 
     // Calculate the amount of shares backed by an amount of ETH
@@ -161,9 +156,6 @@ contract StakingPool {
     }
 
     function _getUserBalance(address account) internal view returns (uint256) {
-        if (totalShares == 0) {
-            return 0;
-        }
         return shares[account] * _getTotalETHBalance() / totalShares;
     }
 
@@ -337,7 +329,7 @@ contract StakingPool {
 
         request.claimed = true;
         // 记账
-        // pool.totalRedeemed += request.amount;
+        pool.totalRedeemed += request.amount;
         pool.ethToLock -= request.amount;
 
         _sendValue(_requestId, request.owner, request.amount);
@@ -360,20 +352,20 @@ contract StakingPool {
         }
 
         // 记账
-        uint256 amountOfETH = _getETHAmountByShares(amountOfShares);
         shares[msg.sender] -= amountOfShares;
         totalShares -= amountOfShares;
+        uint256 amountOfETH = _getETHAmountByShares(amountOfShares);
 
         // TODO: 这里是不是应该用address(this).balance进行判断,而不是用pool.availableFunds判断
-        // if (pool.availableFunds >= amountOfETH) { // 钱足够直接打给取款人,钱不够则放到提款队列中
-        //     // 记账
-        //     pool.availableFunds -= amountOfETH;
-        //     pool.totalRedeemed += amountOfETH;
+        if (pool.availableFunds >= amountOfETH) { // 钱足够直接打给取款人,钱不够则放到提款队列中
+            // 记账
+            pool.availableFunds -= amountOfETH;
+            pool.totalRedeemed += amountOfETH;
 
-        //     // 打款(一定要先减掉用户份额后再打款)
-        //     _sendValue(0, msg.sender, amountOfETH);
-        //     return (0, amountOfETH);
-        // }                                                                                 
+            // 打款(一定要先减掉用户份额后再打款)
+            _sendValue(0, msg.sender, amountOfETH);
+            return (0, amountOfETH);
+        }                                                                                 
 
         requestId = _enqueue(amountOfETH, msg.sender);
         return (requestId, amountOfETH);
