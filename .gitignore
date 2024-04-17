@@ -1,5 +1,18 @@
-node_modules/*
-cache/*
-artifacts/*
+node_modules
+.env
+
+# Hardhat files
+/cache
+/artifacts
+
+# TypeChain files
+/typechain
+/typechain-types
+
+# solidity-coverage files
+/coverage
+/coverage.json
+
 ignition/deployments/*
-typechain-types/*
+
+.openzeppelin

@@ -4,8 +4,8 @@ pragma solidity ^0.8.20;
 import { ProxyAdmin } from "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
 import { ITransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
-contract VotingV2 {
-
+contract Voting {
+    // Example function to upgrade the contract
     function upgrade(address proxyAddress, address proxyAdminAddress, address newImplementation) external {
         // Assuming you have already transferred ProxyAdmin ownership to this contract
         // Set the actual ProxyAdmin address
@@ -17,4 +17,3 @@ contract VotingV2 {
         ProxyAdmin(proxyAdminAddress).upgradeAndCall(proxy, newImplementation, bytes(""));
     }
 }
-

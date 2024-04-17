@@ -7,7 +7,7 @@ describe("Box", function () {
 
   beforeEach(async function () {
     const Box = await ethers.getContractFactory("Box")
-    box = await Box.deploy()
+    const box = await Box.deploy()
     await box.waitForDeployment();
     console.log(`Box deployed to address: ${await box.getAddress()}`)
   })
