@@ -11,8 +11,8 @@ async function main() {
   const boxV3 = await upgrades.upgradeProxy(proxyAddress, BoxV3)
   console.log(await boxV3.getAddress()," BoxV3 address(should be the same)")
 
-  console.log(await upgrades.erc1967.getImplementationAddress(await boxV3.getAddress())," getImplementationAddress")
-  console.log(await upgrades.erc1967.getAdminAddress(await boxV3.getAddress()), " getAdminAddress")    
+  // console.log(await upgrades.erc1967.getImplementationAddress(await boxV3.getAddress())," getImplementationAddress")
+  // console.log(await upgrades.erc1967.getAdminAddress(await boxV3.getAddress()), " getAdminAddress")    
 }
 
 main().catch((error) => {
