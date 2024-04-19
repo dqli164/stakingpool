@@ -372,6 +372,7 @@ contract LidoVoting is IForwarder, AragonApp {
         Vote storage vote_ = votes[_voteId];
 
         // This could re-enter, though we can assume the governance token is not malicious
+        // TODO: 为什么这里可以拿到用户的代币数量
         uint256 voterStake = token.balanceOfAt(_voter, vote_.snapshotBlock);
         VoterState state = vote_.voters[_voter];
 

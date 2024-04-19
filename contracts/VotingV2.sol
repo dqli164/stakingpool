@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity ^0.4.24;
+pragma solidity ^0.8.0;
 
-import "@aragon/os/contracts/lib/math/SafeMath.sol";
-import "@aragon/os/contracts/lib/math/SafeMath64.sol";
-// import { ProxyAdmin } from "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
-// import { ITransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import { ProxyAdmin } from "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
+import { ITransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
 interface IStakingPool {
     function getUserShares(address account) external view returns (uint256);
@@ -13,14 +12,14 @@ interface IStakingPool {
 
 contract VotingV2 {
     using SafeMath for uint256;
-    using SafeMath64 for uint64;
+    // using SafeMath64 for uint256;
 
     bytes32 public constant CREATE_VOTES_ROLE = keccak256("CREATE_VOTES_ROLE");
     bytes32 public constant MODIFY_SUPPORT_ROLE = keccak256("MODIFY_SUPPORT_ROLE");
     bytes32 public constant MODIFY_QUORUM_ROLE = keccak256("MODIFY_QUORUM_ROLE");
     bytes32 public constant UNSAFELY_MODIFY_VOTE_TIME_ROLE = keccak256("UNSAFELY_MODIFY_VOTE_TIME_ROLE");
 
-    uint64 public constant PCT_BASE = 10 ** 18; // 0% = 0; 1% = 10^16; 100% = 10^18
+    uint256 public constant PCT_BASE = 10 ** 18; // 0% = 0; 1% = 10^16; 100% = 10^18
 
     string private constant ERROR_NO_VOTE = "VOTING_NO_VOTE";
     string private constant ERROR_INIT_PCTS = "VOTING_INIT_PCTS";
@@ -43,7 +42,7 @@ contract VotingV2 {
     struct Vote {
         bool executed;
         uint256 startDate; // 开始日期
-        uint64 snapshotBlock; // 快照区块
+        uint256 snapshotBlock; // 快照区块
         uint256 supportRequiredPct; // 所需支持比例
         uint256 minAcceptQuorumPct; // 最小接受法定人数比例
         uint256 yea; // 赞成票数
@@ -57,23 +56,23 @@ contract VotingV2 {
         mapping (address => VoterState) voters;
     }
 
-    uint64 public supportRequiredPct;
-    uint64 public minAcceptQuorumPct;
-    uint64 public voteTime;
+    uint256 public supportRequiredPct;
+    uint256 public minAcceptQuorumPct;
+    uint256 public voteTime;
 
     // We are mimicing an array, we use a mapping instead to make app upgrade more graceful
     mapping (uint256 => Vote) internal votes;
     uint256 public votesLength;
-    uint64 public objectionPhaseTime;
+    uint256 public objectionPhaseTime;
 
     event StartVote(uint256 indexed voteId, address indexed creator, string metadata);
     event CastVote(uint256 indexed voteId, address indexed voter, bool support, uint256 stake);
     event CastObjection(uint256 indexed voteId, address indexed voter, uint256 stake);
     event ExecuteVote(uint256 indexed voteId);
-    event ChangeSupportRequired(uint64 supportRequiredPct);
-    event ChangeMinQuorum(uint64 minAcceptQuorumPct);
-    event ChangeVoteTime(uint64 voteTime);
-    event ChangeObjectionPhaseTime(uint64 objectionPhaseTime);
+    event ChangeSupportRequired(uint256 supportRequiredPct);
+    event ChangeMinQuorum(uint256 minAcceptQuorumPct);
+    event ChangeVoteTime(uint256 voteTime);
+    event ChangeObjectionPhaseTime(uint256 objectionPhaseTime);
 
     modifier voteExists(uint256 _voteId) {
         require(_voteId < votesLength, ERROR_NO_VOTE);
@@ -87,7 +86,7 @@ contract VotingV2 {
     * @param _voteTime Total duration of voting in seconds.
     * @param _objectionPhaseTime The duration of the objection vote phase, i.e. seconds that a vote will be open after the main vote phase ends for token holders to object to the outcome. Main phase duration is calculated as `voteTime - objectionPhaseTime`.
     */
-    constructor(uint64 _supportRequiredPct, uint64 _minAcceptQuorumPct, uint64 _voteTime, uint64 _objectionPhaseTime) public {
+    constructor(uint256 _supportRequiredPct, uint256 _minAcceptQuorumPct, uint256 _voteTime, uint256 _objectionPhaseTime) {
         require(_minAcceptQuorumPct <= _supportRequiredPct, ERROR_INIT_PCTS);
         require(_supportRequiredPct < PCT_BASE, ERROR_INIT_SUPPORT_TOO_BIG);
         require(_voteTime > _objectionPhaseTime, ERROR_INIT_OBJ_TIME_TOO_BIG);
@@ -102,7 +101,7 @@ contract VotingV2 {
     * @notice Change required support to `@formatPct(_supportRequiredPct)`%
     * @param _supportRequiredPct New required support
     */
-    function changeSupportRequiredPct(uint64 _supportRequiredPct)
+    function changeSupportRequiredPct(uint256 _supportRequiredPct)
         external
     {
         require(minAcceptQuorumPct <= _supportRequiredPct, ERROR_CHANGE_SUPPORT_PCTS);
@@ -116,7 +115,7 @@ contract VotingV2 {
     * @notice Change minimum acceptance quorum to `@formatPct(_minAcceptQuorumPct)`%
     * @param _minAcceptQuorumPct New acceptance quorum
     */
-    function changeMinAcceptQuorumPct(uint64 _minAcceptQuorumPct)
+    function changeMinAcceptQuorumPct(uint256 _minAcceptQuorumPct)
         external
     {
         require(_minAcceptQuorumPct <= supportRequiredPct, ERROR_CHANGE_QUORUM_PCTS);
@@ -129,7 +128,7 @@ contract VotingV2 {
     * @notice Change vote time to `_voteTime` sec. The change affects all existing unexecuted votes, so be really careful with it
     * @param _voteTime New vote time
     */
-    function unsafelyChangeVoteTime(uint64 _voteTime)
+    function unsafelyChangeVoteTime(uint256 _voteTime)
         external
     {
         require(_voteTime > objectionPhaseTime, ERROR_CHANGE_VOTE_TIME);
@@ -142,7 +141,7 @@ contract VotingV2 {
     * @notice Change the objection phase duration to `_objectionPhaseTime` sec. The change affects all existing unexecuted votes, so be really careful with it
     * @param _objectionPhaseTime New objection time
     */
-    function unsafelyChangeObjectionPhaseTime(uint64 _objectionPhaseTime)
+    function unsafelyChangeObjectionPhaseTime(uint256 _objectionPhaseTime)
         external
     {
         require(voteTime > _objectionPhaseTime, ERROR_CHANGE_OBJECTION_TIME);
@@ -156,7 +155,7 @@ contract VotingV2 {
     * @param _metadata Vote metadata
     * @return voteId Id for newly created vote
     */
-    function newVote(address shareAddress, address proxyAddress, address proxyAdminAddress, address implementationAddress, string _metadata) external returns (uint256 voteId) {
+    function newVote(address shareAddress, address proxyAddress, address proxyAdminAddress, address implementationAddress, string memory _metadata) external returns (uint256 voteId) {
         return _newVote(shareAddress, proxyAddress, proxyAdminAddress, implementationAddress, _metadata, true);
     }
 
@@ -165,10 +164,9 @@ contract VotingV2 {
     * @dev  _executesIfDecided was deprecated to introduce a proper lock period between decision and execution.
     * @param _metadata Vote metadata
     * @param _castVote Whether to also cast newly created vote
-    * @param _executesIfDecided_deprecated Whether to also immediately execute newly created vote if decided
     * @return voteId id for newly created vote
     */
-    function newVote(address shareAddress, address proxyAddress, address proxyAdminAddress, address implementationAddress, string _metadata, bool _castVote, bool _executesIfDecided_deprecated)
+    function newVote(address shareAddress, address proxyAddress, address proxyAdminAddress, address implementationAddress, string memory _metadata, bool _castVote)
         external
         returns (uint256 voteId)
     {
@@ -181,9 +179,8 @@ contract VotingV2 {
     *      created via `newVote(),` which requires initialization
     * @dev  _executesIfDecided was deprecated to introduce a proper lock period between decision and execution.
     * @param _voteId Id for vote
-    * @param _executesIfDecided_deprecated Whether the vote should execute its action if it becomes decided
     */
-    function vote(uint256 _voteId, bool _support, bool _executesIfDecided_deprecated) external voteExists(_voteId) {
+    function vote(uint256 _voteId, bool _support) external voteExists(_voteId) {
         require(_canVote(_voteId, msg.sender), ERROR_CAN_NOT_VOTE);
         require(!_support || _getVotePhase(votes[_voteId]) == VotePhase.Main, ERROR_CAN_NOT_VOTE);
         _vote(_voteId, _support, msg.sender);
@@ -215,7 +212,7 @@ contract VotingV2 {
     * @dev IForwarder interface conformance
     * @param _evmScript Start vote with script
     */
-    function forward(bytes _evmScript) public view {
+    function forward(bytes calldata _evmScript) public view {
         require(canForward(msg.sender, _evmScript), ERROR_CAN_NOT_FORWARD);
         // _newVote(_evmScript, "", true);
     }
@@ -226,7 +223,7 @@ contract VotingV2 {
     * @param _sender Address of the account intending to forward an action
     * @return True if the given address can create votes, false otherwise
     */
-    function canForward(address _sender, bytes) public pure returns (bool) {
+    function canForward(address _sender, bytes calldata) public pure returns (bool) {
         // Note that `canPerform()` implicitly does an initialization check itself
         return true;
     }
@@ -270,17 +267,6 @@ contract VotingV2 {
     /**
     * @dev Return all information for a vote by its ID
     * @param _voteId Vote identifier
-    * @return true if the vote is open
-    * @return Vote executed status
-    * @return Vote start date
-    * @return Vote snapshot block
-    * @return Vote support required
-    * @return Vote minimum acceptance quorum
-    * @return Vote yeas amount
-    * @return Vote nays amount
-    * @return Vote power
-    * @return Vote script
-    * @return Vote phase
     */
     function getVote(uint256 _voteId)
         public
@@ -290,13 +276,12 @@ contract VotingV2 {
             bool open,
             bool executed,
             uint256 startDate,
-            uint64 snapshotBlock,
+            uint256 snapshotBlock,
             uint256 supportRequired,
             uint256 minAcceptQuorum,
             uint256 yea,
             uint256 nay,
             uint256 votingPower,
-            bytes script,
             VotePhase phase
         )
     {
@@ -311,7 +296,7 @@ contract VotingV2 {
         yea = vote_.yea;
         nay = vote_.nay;
         votingPower = vote_.votingPower;
-        script = vote_.executionScript;
+        // script = vote_.executionScript;
         phase = _getVotePhase(vote_);
     }
 
@@ -331,9 +316,9 @@ contract VotingV2 {
     * @dev Internal function to create a new vote
     * @return voteId id for newly created vote
     */
-    function _newVote(address shareAddress, address proxyAddress, address proxyAdminAddress, address implementationAddress, string _metadata, bool _castVote) internal returns (uint256 voteId) {
+    function _newVote(address shareAddress, address proxyAddress, address proxyAdminAddress, address implementationAddress, string memory _metadata, bool _castVote) internal returns (uint256 voteId) {
         // TODO: getBlockNumber64()
-        // uint64 snapshotBlock = getBlockNumber64() - 1; // avoid double voting in this very block
+        // uint256 snapshotBlock = getBlockNumber64() - 1; // avoid double voting in this very block
         uint256 votingPower = IStakingPool(shareAddress).getTotalShares(); // TODO: 这里是怎么知道Token的总供应量的
         require(votingPower > 0, ERROR_NO_VOTING_POWER);
 
@@ -371,7 +356,7 @@ contract VotingV2 {
 
         // If voter had previously voted, decrease count
         if (state == VoterState.Yea) {
-            vote_.yea = vote_.yea.sub(voterStake);
+            vote_.yea = vote_.yea.sub(voterStake); 
         } else if (state == VoterState.Nay) {
             vote_.nay = vote_.nay.sub(voterStake);
         }
@@ -407,9 +392,13 @@ contract VotingV2 {
 
         vote_.executed = true;
 
-        bytes memory input = new bytes(0); // TODO: Consider input for voting scripts
+        // bytes memory input = new bytes(0); // TODO: Consider input for voting scripts
         // runScript(vote_.executionScript, input, new address[](0));
 
+        ITransparentUpgradeableProxy proxy = ITransparentUpgradeableProxy(vote_.proxyAddress);
+
+        // Upgrade the proxy to the new implementation
+        ProxyAdmin(vote_.proxyAdminAddress).upgradeAndCall(proxy, vote_.implementationAddress, bytes(""));
         emit ExecuteVote(_voteId);
     }
 
@@ -488,11 +477,7 @@ contract VotingV2 {
         return computedPct > _pct;
     }
 
-    function isValuePct(uint256 _value, uint256 _total, uint256 _pct) external pure returns (bool) {
-        return  _isValuePct(_value, _total, _pct);
-    }
-
     function getTimestamp64() internal view returns (uint256) {
-        return uint64(block.timestamp);
+        return uint256(block.timestamp);
     }
 }
