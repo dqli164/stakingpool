@@ -42,8 +42,7 @@ contract StakingPool {
 
     // MainNet: 0x00000000219ab540356cBB839Cbe05303d7705Fa
     // Holesky: 0x4242424242424242424242424242424242424242
-    address public constant DEPOSIT_CONTRACT_ADDRESS = 0x4242424242424242424242424242424242424242;
-    IDepositContract DEPOSIT_CONTRACT = IDepositContract(DEPOSIT_CONTRACT_ADDRESS);
+    address DEPOSIT_CONTRACT_ADDRESS;
 
     address VAULT_CONTRACT_ADDRESS;
 
@@ -61,8 +60,9 @@ contract StakingPool {
     error NotEnoughEtherToDeposit();
     error DepositNotInWhitelist();
 
-    constructor() {
+    function initializer(address depositContractAddress) public {
         owner = msg.sender;
+        DEPOSIT_CONTRACT_ADDRESS = depositContractAddress;
     }
 
     /**
@@ -100,6 +100,7 @@ contract StakingPool {
         pool.availableFunds -= DEPOSIT_SIZE; // 减少可用资金
 
        // 充值
+        IDepositContract DEPOSIT_CONTRACT = IDepositContract(DEPOSIT_CONTRACT_ADDRESS);
         DEPOSIT_CONTRACT.deposit{value: DEPOSIT_SIZE}(
             pubkey,
             withdrawalCredentials,
@@ -333,9 +334,7 @@ contract StakingPool {
 
         request.claimed = true;
         // 记账
-        pool.totalRedeemed += request.amount;
         pool.ethToLock -= request.amount;
-
         _sendValue(_requestId, request.owner, request.amount);
     }
 
@@ -343,30 +342,27 @@ contract StakingPool {
      * 打钱给提款人
      **/
     function _sendValue(uint256 _requestId, address recipient, uint256 amountOfETH) internal {
-        if (pool.availableFunds < amountOfETH) revert NotEnoughEther();
-
         (bool success,) = recipient.call{value: amountOfETH}("");
         if (!success) revert CantSendValueRecipientMayHaveReverted();
         emit WithdrawalClaimed(_requestId, recipient, amountOfETH);
     }
 
-    function requestWithdrawal(uint256 amountOfShares) external payable returns (uint256 requestId, uint256 amount) {
-        if (amountOfShares > shares[msg.sender]) {
-            revert NotEnoughShares();
+    function requestWithdrawal(uint256 amountOfETH) external payable returns (uint256 requestId, uint256 amount) {
+        if (amountOfETH > _getUserBalance(msg.sender)) {
+            revert NotEnoughEther();
         }
 
         // 记账
+        uint256 amountOfShares = _getSharesByETHAmount(amountOfETH);
         shares[msg.sender] -= amountOfShares;
         totalShares -= amountOfShares;
-        uint256 amountOfETH = _getETHAmountByShares(amountOfShares);
+        pool.totalRedeemed += amountOfETH;
 
         // TODO: 这里是不是应该用address(this).balance进行判断,而不是用pool.availableFunds判断
         if (pool.availableFunds >= amountOfETH) { // 钱足够直接打给取款人,钱不够则放到提款队列中
             // 记账
-            pool.availableFunds -= amountOfETH;
-            pool.totalRedeemed += amountOfETH;
-
             // 打款(一定要先减掉用户份额后再打款)
+            pool.availableFunds -= amountOfETH;
             _sendValue(0, msg.sender, amountOfETH);
             return (0, amountOfETH);
         }                                                                                 

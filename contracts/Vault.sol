@@ -13,7 +13,6 @@ interface IStakingPool {
 contract Valut {
 
     IStakingPool public immutable STAKINGPOOL;
-    address public immutable TREASURY;
 
     // Events
     event FundsReceived(

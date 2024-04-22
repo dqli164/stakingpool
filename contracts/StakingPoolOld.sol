@@ -15,7 +15,7 @@ interface IDepositContract {
     ) external payable;
 }
 
-contract StakingPool {
+contract StakingPoolOld {
     address public owner;
 
     struct User {

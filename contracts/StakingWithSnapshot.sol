@@ -14,7 +14,7 @@ interface IDepositContract {
     ) external payable;
 }
 
-contract StakingPool {
+contract StakingPoolWithSnapshot {
     address public owner;
 
     // shares
