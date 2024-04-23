@@ -12,13 +12,12 @@ interface IStakingPool {
 
 contract VotingV2 {
     using SafeMath for uint256;
-    // using SafeMath64 for uint256;
 
-    bytes32 public constant CREATE_VOTES_ROLE = keccak256("CREATE_VOTES_ROLE");
-    bytes32 public constant MODIFY_SUPPORT_ROLE = keccak256("MODIFY_SUPPORT_ROLE");
-    bytes32 public constant MODIFY_QUORUM_ROLE = keccak256("MODIFY_QUORUM_ROLE");
-    bytes32 public constant UNSAFELY_MODIFY_VOTE_TIME_ROLE = keccak256("UNSAFELY_MODIFY_VOTE_TIME_ROLE");
-
+    address private owner;
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Not Owner");
+        _;
+    }
     uint256 public constant PCT_BASE = 10 ** 18; // 0% = 0; 1% = 10^16; 100% = 10^18
 
     string private constant ERROR_NO_VOTE = "VOTING_NO_VOTE";
@@ -29,11 +28,9 @@ contract VotingV2 {
     string private constant ERROR_CHANGE_SUPPORT_TOO_BIG = "VOTING_CHANGE_SUPP_TOO_BIG";
     string private constant ERROR_CAN_NOT_VOTE = "VOTING_CAN_NOT_VOTE";
     string private constant ERROR_CAN_NOT_EXECUTE = "VOTING_CAN_NOT_EXECUTE";
-    string private constant ERROR_CAN_NOT_FORWARD = "VOTING_CAN_NOT_FORWARD";
     string private constant ERROR_NO_VOTING_POWER = "VOTING_NO_VOTING_POWER";
     string private constant ERROR_CHANGE_VOTE_TIME = "VOTING_VOTE_TIME_TOO_SMALL";
     string private constant ERROR_CHANGE_OBJECTION_TIME = "VOTING_OBJ_TIME_TOO_BIG";
-    string private constant ERROR_INIT_OBJ_TIME_TOO_BIG = "VOTING_INIT_OBJ_TIME_TOO_BIG";
 
     enum VoterState { Absent, Yea, Nay }
 
@@ -43,22 +40,22 @@ contract VotingV2 {
         bool executed;
         uint256 startDate; // 开始日期
         uint256 snapshotBlock; // 快照区块
-        uint256 supportRequiredPct; // 所需支持比例
-        uint256 minAcceptQuorumPct; // 最小接受法定人数比例
+        uint256 supportRequiredPct; // 投票人数中支持票的比例
+        uint256 minAcceptQuorumPct; // 支持票占总的权重的比例
         uint256 yea; // 赞成票数
         uint256 nay; // 反对票数
-        uint256 votingPower; // 投票权利
-        bytes executionScript; // 执行脚本
-        address shareAddress; // 拿用户份额的地址
+        uint256 votingPower; // 投票总权重(totalShares)
         address proxyAddress; // 代理地址
         address proxyAdminAddress; // 代理管理员地址
-        address implementationAddress; // 新合约的地址
+        address implementationAddress; // 新逻辑合约的地址
         mapping (address => VoterState) voters;
-    }
+    } // 投票
+    
+    uint256 public voteTime; // 投票的持续时间
+    uint256 public supportRequiredPct; // 投票人数中支持票的比例
+    uint256 public minAcceptQuorumPct;  // 支持票占总的权重的比例
 
-    uint256 public supportRequiredPct;
-    uint256 public minAcceptQuorumPct;
-    uint256 public voteTime;
+    address STAKING_POOL_PROXY_ADDRESS; // 质押合约的代理地址
 
     // We are mimicing an array, we use a mapping instead to make app upgrade more graceful
     mapping (uint256 => Vote) internal votes;
@@ -84,17 +81,16 @@ contract VotingV2 {
     * @param _supportRequiredPct Percentage of yeas in casted votes for a vote to succeed (expressed as a percentage of 10^18; eg. 10^16 = 1%, 10^18 = 100%)
     * @param _minAcceptQuorumPct Percentage of yeas in total possible votes for a vote to succeed (expressed as a percentage of 10^18; eg. 10^16 = 1%, 10^18 = 100%)
     * @param _voteTime Total duration of voting in seconds.
-    * @param _objectionPhaseTime The duration of the objection vote phase, i.e. seconds that a vote will be open after the main vote phase ends for token holders to object to the outcome. Main phase duration is calculated as `voteTime - objectionPhaseTime`.
     */
-    constructor(uint256 _supportRequiredPct, uint256 _minAcceptQuorumPct, uint256 _voteTime, uint256 _objectionPhaseTime) {
+    constructor(uint256 _supportRequiredPct, uint256 _minAcceptQuorumPct, uint256 _voteTime, address stakingPoolProxyAddress, address multisigAddress) {
         require(_minAcceptQuorumPct <= _supportRequiredPct, ERROR_INIT_PCTS);
         require(_supportRequiredPct < PCT_BASE, ERROR_INIT_SUPPORT_TOO_BIG);
-        require(_voteTime > _objectionPhaseTime, ERROR_INIT_OBJ_TIME_TOO_BIG);
-
         supportRequiredPct = _supportRequiredPct;
         minAcceptQuorumPct = _minAcceptQuorumPct;
         voteTime = _voteTime;
-        objectionPhaseTime = _objectionPhaseTime;
+
+        STAKING_POOL_PROXY_ADDRESS = stakingPoolProxyAddress;
+        owner = multisigAddress;
     }
 
     /**
@@ -102,7 +98,7 @@ contract VotingV2 {
     * @param _supportRequiredPct New required support
     */
     function changeSupportRequiredPct(uint256 _supportRequiredPct)
-        external
+        external onlyOwner
     {
         require(minAcceptQuorumPct <= _supportRequiredPct, ERROR_CHANGE_SUPPORT_PCTS);
         require(_supportRequiredPct < PCT_BASE, ERROR_CHANGE_SUPPORT_TOO_BIG);
@@ -116,7 +112,7 @@ contract VotingV2 {
     * @param _minAcceptQuorumPct New acceptance quorum
     */
     function changeMinAcceptQuorumPct(uint256 _minAcceptQuorumPct)
-        external
+        external onlyOwner
     {
         require(_minAcceptQuorumPct <= supportRequiredPct, ERROR_CHANGE_QUORUM_PCTS);
         minAcceptQuorumPct = _minAcceptQuorumPct;
@@ -129,7 +125,7 @@ contract VotingV2 {
     * @param _voteTime New vote time
     */
     function unsafelyChangeVoteTime(uint256 _voteTime)
-        external
+        external onlyOwner
     {
         require(_voteTime > objectionPhaseTime, ERROR_CHANGE_VOTE_TIME);
         voteTime = _voteTime;
@@ -142,7 +138,7 @@ contract VotingV2 {
     * @param _objectionPhaseTime New objection time
     */
     function unsafelyChangeObjectionPhaseTime(uint256 _objectionPhaseTime)
-        external
+        external onlyOwner
     {
         require(voteTime > _objectionPhaseTime, ERROR_CHANGE_OBJECTION_TIME);
         objectionPhaseTime = _objectionPhaseTime;
@@ -155,8 +151,8 @@ contract VotingV2 {
     * @param _metadata Vote metadata
     * @return voteId Id for newly created vote
     */
-    function newVote(address shareAddress, address proxyAddress, address proxyAdminAddress, address implementationAddress, string memory _metadata) external returns (uint256 voteId) {
-        return _newVote(shareAddress, proxyAddress, proxyAdminAddress, implementationAddress, _metadata, true);
+    function newVote(address shareAddress, address proxyAddress, address proxyAdminAddress, address implementationAddress, string memory _metadata) external onlyOwner returns (uint256 voteId) {
+        return _newVote(shareAddress, proxyAddress, proxyAdminAddress, implementationAddress, _metadata, false);
     }
 
     /**
@@ -167,7 +163,7 @@ contract VotingV2 {
     * @return voteId id for newly created vote
     */
     function newVote(address shareAddress, address proxyAddress, address proxyAdminAddress, address implementationAddress, string memory _metadata, bool _castVote)
-        external
+        external onlyOwner
         returns (uint256 voteId)
     {
         return _newVote(shareAddress, proxyAddress, proxyAdminAddress, implementationAddress, _metadata, _castVote);
@@ -195,40 +191,6 @@ contract VotingV2 {
     function executeVote(uint256 _voteId) external voteExists(_voteId) {
         _executeVote(_voteId);
     }
-
-    // Forwarding fns
-
-    /**
-    * @notice Tells whether the Voting app is a forwarder or not
-    * @dev IForwarder interface conformance
-    * @return Always true
-    */
-    function isForwarder() external pure returns (bool) {
-        return true;
-    }
-
-    /**
-    * @notice Creates a vote to execute the desired action, and casts a support vote if possible
-    * @dev IForwarder interface conformance
-    * @param _evmScript Start vote with script
-    */
-    function forward(bytes calldata _evmScript) public view {
-        require(canForward(msg.sender, _evmScript), ERROR_CAN_NOT_FORWARD);
-        // _newVote(_evmScript, "", true);
-    }
-
-    /**
-    * @notice Tells whether `_sender` can forward actions or not
-    * @dev IForwarder interface conformance
-    * @param _sender Address of the account intending to forward an action
-    * @return True if the given address can create votes, false otherwise
-    */
-    function canForward(address _sender, bytes calldata) public pure returns (bool) {
-        // Note that `canPerform()` implicitly does an initialization check itself
-        return true;
-    }
-
-    // Getter fns
 
     /**
     * @notice Tells whether a vote #`_voteId` can be executed or not
@@ -296,7 +258,6 @@ contract VotingV2 {
         yea = vote_.yea;
         nay = vote_.nay;
         votingPower = vote_.votingPower;
-        // script = vote_.executionScript;
         phase = _getVotePhase(vote_);
     }
 
@@ -317,7 +278,6 @@ contract VotingV2 {
     * @return voteId id for newly created vote
     */
     function _newVote(address shareAddress, address proxyAddress, address proxyAdminAddress, address implementationAddress, string memory _metadata, bool _castVote) internal returns (uint256 voteId) {
-        // TODO: getBlockNumber64()
         // uint256 snapshotBlock = getBlockNumber64() - 1; // avoid double voting in this very block
         uint256 votingPower = IStakingPool(shareAddress).getTotalShares(); // TODO: 这里是怎么知道Token的总供应量的
         require(votingPower > 0, ERROR_NO_VOTING_POWER);
@@ -326,16 +286,12 @@ contract VotingV2 {
 
         Vote storage vote_ = votes[voteId];
         vote_.startDate = getTimestamp64();
-        // vote_.snapshotBlock = snapshotBlock;
         vote_.supportRequiredPct = supportRequiredPct;
         vote_.minAcceptQuorumPct = minAcceptQuorumPct;
         vote_.votingPower = votingPower;
-        // vote_.executionScript = _executionScript;
-        vote_.shareAddress = shareAddress;
         vote_.proxyAddress = proxyAddress;
         vote_.proxyAdminAddress = proxyAdminAddress;
         vote_.implementationAddress = implementationAddress;
-
         emit StartVote(voteId, msg.sender, _metadata);
 
         if (_castVote && _canVote(voteId, msg.sender)) {
@@ -351,7 +307,7 @@ contract VotingV2 {
         Vote storage vote_ = votes[_voteId];
 
         // This could re-enter, though we can assume the governance token is not malicious
-        uint256 voterStake = IStakingPool(vote_.shareAddress).getUserShares(_voter);
+        uint256 voterStake = IStakingPool(STAKING_POOL_PROXY_ADDRESS).getUserShares(_voter);
         VoterState state = vote_.voters[_voter];
 
         // If voter had previously voted, decrease count
@@ -438,7 +394,7 @@ contract VotingV2 {
     */
     function _canVote(uint256 _voteId, address _voter) internal view returns (bool) {
         Vote storage vote_ = votes[_voteId];
-        return _isVoteOpen(vote_) && IStakingPool(vote_.shareAddress).getUserShares(_voter) > 0;
+        return _isVoteOpen(vote_) && IStakingPool(STAKING_POOL_PROXY_ADDRESS).getUserShares(_voter) > 0;
     }
 
     /**
