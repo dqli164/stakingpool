@@ -26,10 +26,10 @@ contract StakingPool {
         uint256 totalDeposited; // 总共充值了多少
         uint256 totalRedeemed; // 总共赎回了多少
         uint256 totalRewards; // 总收益
-        uint256 totalLossed; // 总共损失了多少
+        uint256 totalLossed; // 总工损失了多少
         uint256 ethToLock; // 锁定在信标链上的资金
-        uint256 ethMeetWithdraw; // 被锁定的用来满足提款的资金
-        uint256 lastRewardTime; // 上一次获取收益的时间(暂时没用上)
+        uint256 ethToMeetWithdraw; // 被锁定的用来满足提款的资金
+        uint256 lastRewardTime; // 上一次获取收益的时间
     }
     Pool public pool; // 池子
 
@@ -131,7 +131,7 @@ contract StakingPool {
             VAULT_CONTRACT.withdrawValut(rewards + refunds); // 提取资金
             pool.lastRewardTime = block.timestamp;
             pool.totalRewards += rewards; // 增加奖励
-            
+
             if (refunds >= DEPOSIT_SIZE) { // refunds + rewards
                 uint256 exitedValidators = refunds / DEPOSIT_SIZE;
                 uint256 rewardFromRefunds = refunds - exitedValidators * DEPOSIT_SIZE;
@@ -146,8 +146,8 @@ contract StakingPool {
         }
 
         // 满足提现请求
-        uint256 ethMeetWithdraw = _finalize();
-        pool.ethMeetWithdraw += ethMeetWithdraw;
+        uint256 ethToMeetWithdraw = _finalize();
+        pool.ethToMeetWithdraw += ethToMeetWithdraw;
     }
 
     // Calculate the amount of shares backed by an amount of ETH
@@ -171,7 +171,7 @@ contract StakingPool {
     }
 
     function _getPoolAvailableFunds() internal view returns (uint256) {
-        return _getTotalETHBalance() - pool.ethToLock - pool.ethMeetWithdraw;
+        return _getTotalETHBalance() - pool.ethToLock - pool.ethToMeetWithdraw;
     }
 
     function _getTotalETHBalance() internal view returns (uint256) {
@@ -301,10 +301,10 @@ contract StakingPool {
         );
     }
 
-    function _finalize() internal returns (uint256 ethMeetWithdraw){
+    function _finalize() internal returns (uint256 ethToMeetWithdraw){
         uint256 currentBatchIndex = 1;
         uint256 lastFinalizedRequestId = getLastFinalizedRequestId();
-        while (ethMeetWithdraw <= _getPoolAvailableFunds()) {
+        while (ethToMeetWithdraw <= _getPoolAvailableFunds()) {
             uint256 requestId = lastFinalizedRequestId + currentBatchIndex;
             if (requestId > getLastRequestId()) {
                 break;
@@ -313,11 +313,11 @@ contract StakingPool {
             // if (request.timestamp < block.timestamp + 24 * 60 * 60) { // 发起提款24h后的请求才能被确认
             //     break;
             // }
-            if (ethMeetWithdraw + request.amount >_getPoolAvailableFunds()) {
+            if (ethToMeetWithdraw + request.amount >_getPoolAvailableFunds()) {
                 emit NotEnoughEtherToRedeem(requestId, request.owner, request.amount, block.timestamp);
                 break;
             }
-            ethMeetWithdraw += request.amount;
+            ethToMeetWithdraw += request.amount;
             _setLastFinalizedRequestId(requestId);
             emit WithdrawalsFinalized(requestId - 1, requestId, request.amount, block.timestamp);
 
@@ -352,7 +352,7 @@ contract StakingPool {
         if (request.claimed) revert RequestAlreadyClaimed(_requestId);
 
         request.claimed = true;
-        pool.ethMeetWithdraw -= request.amount;
+        pool.ethToMeetWithdraw -= request.amount;
         _sendValue(_requestId, request.owner, request.amount);
     }
 
