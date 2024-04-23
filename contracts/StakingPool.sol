@@ -19,17 +19,17 @@ contract StakingPool {
 
     // shares
     mapping (address => uint256) private shares; // 用户的share份额
-    uint256 public totalShares;  // 总的share份额
+    uint256 private totalShares;  // 总的share份额
 
     // pool
     struct Pool {
         uint256 totalDeposited; // 总共充值了多少
         uint256 totalRedeemed; // 总共赎回了多少
         uint256 totalRewards; // 总收益
-        uint256 availableFunds; // 可用资金
-        uint256 ethToLock; // 被锁定的用来满足提款的资金
-        uint256 lastRewardTime; // 上一次获取收益的时间
-        uint256 depositedValidators; // 充值的验证者数量
+        uint256 totalLossed; // 总共损失了多少
+        uint256 ethToLock; // 锁定在信标链上的资金
+        uint256 ethMeetWithdraw; // 被锁定的用来满足提款的资金
+        uint256 lastRewardTime; // 上一次获取收益的时间(暂时没用上)
     }
     Pool public pool; // 池子
 
@@ -37,13 +37,14 @@ contract StakingPool {
     bool      private whitelistEnabled; // 是否开启白名单
     mapping (address => bool) private whitelists; // 仅白名单中的用户可以直接向合约转账
 
+    bool private depositPaused; // 是否暂停充值
+
     // deposit size
     uint256 private constant DEPOSIT_SIZE = 32 ether;
 
     // MainNet: 0x00000000219ab540356cBB839Cbe05303d7705Fa
     // Holesky: 0x4242424242424242424242424242424242424242
     address DEPOSIT_CONTRACT_ADDRESS;
-
     address VAULT_CONTRACT_ADDRESS;
 
     // The amount of ETH withdrawn from Valut to current contract
@@ -78,7 +79,6 @@ contract StakingPool {
         shares[account] += amountOfShares;
         totalShares += amountOfShares;
         pool.totalDeposited += amount;
-        pool.availableFunds += amount;
 
         emit Deposited(account, amount, amountOfShares, block.timestamp);
         return amountOfShares;
@@ -94,10 +94,9 @@ contract StakingPool {
         bytes32 depositDataRoot
     ) external payable {
         require(msg.sender == owner, "AUTH_DENIED");
-        if (pool.availableFunds < DEPOSIT_SIZE ) revert NotEnoughEtherToDeposit();
+        if (_getPoolAvailableFunds() < DEPOSIT_SIZE ) revert NotEnoughEtherToDeposit();
 
-        pool.depositedValidators += 1; // 增加Validator数量
-        pool.availableFunds -= DEPOSIT_SIZE; // 减少可用资金
+        pool.ethToLock += DEPOSIT_SIZE;
 
        // 充值
         IDepositContract DEPOSIT_CONTRACT = IDepositContract(DEPOSIT_CONTRACT_ADDRESS);
@@ -122,22 +121,33 @@ contract StakingPool {
         emit RewardsReceived(msg.value, block.timestamp);
     }
 
-    function submitReport(address vaultAddress, uint256 rewards, uint256 refund) external {
-        require(msg.sender == owner, "Permission Denied");
+    function submitReport(address vaultAddress, uint256 rewards, uint256 refunds) external {
+        require(msg.sender == owner, "AUTH_DENIED");
         // collect funds from vault
         VAULT_CONTRACT_ADDRESS = vaultAddress;
         IVault VAULT_CONTRACT = IVault(vaultAddress);
-        // 从vault合约提款
-        VAULT_CONTRACT.withdrawValut(rewards + refund);
 
-        // 记账
-        pool.totalRewards += rewards;
-        pool.availableFunds += rewards + refund;
+        if (rewards + refunds > 0) {
+            VAULT_CONTRACT.withdrawValut(rewards + refunds); // 提取资金
+            pool.lastRewardTime = block.timestamp;
+            pool.totalRewards += rewards; // 增加奖励
+            
+            if (refunds >= DEPOSIT_SIZE) { // refunds + rewards
+                uint256 exitedValidators = refunds / DEPOSIT_SIZE;
+                uint256 rewardFromRefunds = refunds - exitedValidators * DEPOSIT_SIZE;
+                pool.totalRewards += rewardFromRefunds;
+                pool.ethToLock -= exitedValidators * DEPOSIT_SIZE; // 减少锁定的ETH数量
+            }
+            if (refunds > 0 && refunds < DEPOSIT_SIZE) { // penalty
+                uint256 penalty = DEPOSIT_SIZE - refunds;
+                pool.totalLossed += penalty; // 增加损失
+                pool.ethToLock -= DEPOSIT_SIZE; // 减少锁定的ETH数量
+            }
+        }
 
-        uint256 ethToLock = _finalize();
-        // 记账
-        pool.ethToLock += ethToLock;
-        pool.availableFunds -= ethToLock;
+        // 满足提现请求
+        uint256 ethMeetWithdraw = _finalize();
+        pool.ethMeetWithdraw += ethMeetWithdraw;
     }
 
     // Calculate the amount of shares backed by an amount of ETH
@@ -160,8 +170,12 @@ contract StakingPool {
         return shares[account] * _getTotalETHBalance() / totalShares;
     }
 
+    function _getPoolAvailableFunds() internal view returns (uint256) {
+        return _getTotalETHBalance() - pool.ethToLock - pool.ethMeetWithdraw;
+    }
+
     function _getTotalETHBalance() internal view returns (uint256) {
-        return pool.totalDeposited + pool.totalRewards - pool.totalRedeemed - pool.ethToLock;
+        return pool.totalDeposited + pool.totalRewards - pool.totalRedeemed - pool.totalLossed;
     }
 
     function getUserBalance(address account) external view returns (uint256) {
@@ -185,6 +199,11 @@ contract StakingPool {
     function addWhitelist(address account) external {
         require(msg.sender == owner, "AUTH_DENIED");
         whitelists[account] = true;
+    }
+
+    function deleteWhitelist(address account) external {
+        require(msg.sender == owner, "AUTH_DENIED");
+        whitelists[account] = false;
     }
 
     receive() external payable {
@@ -282,10 +301,10 @@ contract StakingPool {
         );
     }
 
-    function _finalize() internal returns (uint256 ethToLock){
+    function _finalize() internal returns (uint256 ethMeetWithdraw){
         uint256 currentBatchIndex = 1;
         uint256 lastFinalizedRequestId = getLastFinalizedRequestId();
-        while (ethToLock <= pool.availableFunds) {
+        while (ethMeetWithdraw <= _getPoolAvailableFunds()) {
             uint256 requestId = lastFinalizedRequestId + currentBatchIndex;
             if (requestId > getLastRequestId()) {
                 break;
@@ -294,11 +313,11 @@ contract StakingPool {
             // if (request.timestamp < block.timestamp + 24 * 60 * 60) { // 发起提款24h后的请求才能被确认
             //     break;
             // }
-            if (ethToLock + request.amount > pool.availableFunds) {
+            if (ethMeetWithdraw + request.amount >_getPoolAvailableFunds()) {
                 emit NotEnoughEtherToRedeem(requestId, request.owner, request.amount, block.timestamp);
                 break;
             }
-            ethToLock += request.amount;
+            ethMeetWithdraw += request.amount;
             _setLastFinalizedRequestId(requestId);
             emit WithdrawalsFinalized(requestId - 1, requestId, request.amount, block.timestamp);
 
@@ -333,8 +352,7 @@ contract StakingPool {
         if (request.claimed) revert RequestAlreadyClaimed(_requestId);
 
         request.claimed = true;
-        // 记账
-        pool.ethToLock -= request.amount;
+        pool.ethMeetWithdraw -= request.amount;
         _sendValue(_requestId, request.owner, request.amount);
     }
 
@@ -352,17 +370,13 @@ contract StakingPool {
             revert NotEnoughEther();
         }
 
-        // 记账
         uint256 amountOfShares = _getSharesByETHAmount(amountOfETH);
         shares[msg.sender] -= amountOfShares;
         totalShares -= amountOfShares;
         pool.totalRedeemed += amountOfETH;
 
-        // TODO: 这里是不是应该用address(this).balance进行判断,而不是用pool.availableFunds判断
-        if (pool.availableFunds >= amountOfETH) { // 钱足够直接打给取款人,钱不够则放到提款队列中
-            // 记账
+        if (_getPoolAvailableFunds() >= amountOfETH) { // 钱足够直接打给取款人,钱不够则放到提款队列中
             // 打款(一定要先减掉用户份额后再打款)
-            pool.availableFunds -= amountOfETH;
             _sendValue(0, msg.sender, amountOfETH);
             return (0, amountOfETH);
         }                                                                                 
