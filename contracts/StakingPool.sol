@@ -365,7 +365,7 @@ contract StakingPool {
         emit WithdrawalClaimed(_requestId, recipient, amountOfETH);
     }
 
-    function requestWithdrawal(uint256 amountOfETH) external payable returns (uint256 requestId, uint256 amount) {
+    function requestWithdrawal(uint256 amountOfETH) external payable returns (uint256 requestId) {
         if (amountOfETH > _getUserBalance(msg.sender)) {
             revert NotEnoughEther();
         }
@@ -378,11 +378,11 @@ contract StakingPool {
         if (_getPoolAvailableFunds() >= amountOfETH) { // 钱足够直接打给取款人,钱不够则放到提款队列中
             // 打款(一定要先减掉用户份额后再打款)
             _sendValue(0, msg.sender, amountOfETH);
-            return (0, amountOfETH);
+            return 0;
         }                                                                                 
 
         requestId = _enqueue(amountOfETH, msg.sender);
-        return (requestId, amountOfETH);
+        return requestId;
     }
 
     function getLastRequestId() public view returns (uint256) {
