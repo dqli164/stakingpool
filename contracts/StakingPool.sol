@@ -103,8 +103,7 @@ contract StakingPool {
         bytes calldata withdrawalCredentials,
         bytes calldata signature,
         bytes32 depositDataRoot
-    ) external payable {
-        require(msg.sender == owner, "AUTH_DENIED");
+    ) external payable onlyOwner {
         if (_getPoolAvailableFunds() < DEPOSIT_SIZE)
             revert NotEnoughEtherToDeposit();
 
