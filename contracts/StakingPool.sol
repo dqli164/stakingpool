@@ -246,6 +246,15 @@ contract StakingPool is Initializable {
         owner = newOwner;
     }
 
+    function getBeaconChainDepositAddress() external view returns (address) {
+        return DEPOSIT_CONTRACT_ADDRESS;
+    }
+
+    function setBeaconChainDepositAddress(address depositAddress) external onlyOwner {
+        require(depositAddress != address(0), "INVALID BEACON CHAIN ADDRESS");
+        DEPOSIT_CONTRACT_ADDRESS = depositAddress;
+    }
+
     receive() external payable {
         if (whitelistEnabled && !whitelists[msg.sender]) {
             revert AccountNotInWhitelist();
