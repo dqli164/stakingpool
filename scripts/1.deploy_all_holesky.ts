@@ -14,6 +14,12 @@ async function main() {
   console.log("Deploying Vault...")
   const vault = await upgrades.deployProxy(Vault,[await stakingPool.getAddress()], { initializer: 'initialize' })
   console.log(await vault.getAddress()," Vault(proxy) address")
+
+  const Voting = await ethers.getContractFactory("Voting")
+  console.log("Deploying Voting...")
+  const voting = await upgrades.deployProxy(Voting,['600000000000000000', '510000000000000000', 180, 60], { initializer: 'initialize' })
+
+  console.log(await voting.getAddress()," voting(proxy) address")
 }
 
 main().catch((error) => {
