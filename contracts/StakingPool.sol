@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.8.4;
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
 interface IVault {
     function withdrawValut(uint256 amount) external;
@@ -14,7 +15,7 @@ interface IDepositContract {
     ) external payable;
 }
 
-contract StakingPool {
+contract StakingPool is Initializable {
     address public owner;
     modifier onlyOwner() {
         require(msg.sender == owner, "Not Owner");
@@ -69,7 +70,7 @@ contract StakingPool {
     error NotEnoughEtherToDeposit();
     error AccountNotInWhitelist();
 
-    function initializer(address depositContractAddress) public {
+    function initialize(address depositContractAddress) public initializer {
         owner = msg.sender;
         DEPOSIT_CONTRACT_ADDRESS = depositContractAddress;
     }
