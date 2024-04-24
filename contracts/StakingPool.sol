@@ -240,8 +240,12 @@ contract StakingPool is Initializable {
     }
 
     function transferOwnership(address newOwner) external onlyOwner {
-        require(newOwner != address(0), "Invalid Owner");
+        require(newOwner != address(0), "Invalid New Owner");
         owner = newOwner;
+    }
+
+    function getOwner() external view returns (address) {
+        return owner;
     }
 
     receive() external payable {
@@ -259,7 +263,6 @@ contract StakingPool is Initializable {
     uint256 private LAST_REQUEST_ID_POSITION;
     /// @dev last index of finalized request in the queue
     uint256 private LAST_FINALIZED_REQUEST_ID_POSITION;
-    uint256 public constant WEI_PER_ETHER = 1e18;
 
     error NotEnoughEther();
     error NotEnoughShares();
