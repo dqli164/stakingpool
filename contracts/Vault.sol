@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity ^0.8.13;
+pragma solidity ^0.8.4;
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
 interface IStakingPool {
     /**
@@ -10,9 +11,8 @@ interface IStakingPool {
     function receiveVaultFunds() external payable;
 }
 
-contract Valut {
-
-    IStakingPool public immutable STAKINGPOOL;
+contract Vault is Initializable {
+    address private STAKING_POOL_PROXY_ADDRESS;
 
     // Events
     event FundsReceived(
@@ -28,11 +28,9 @@ contract Valut {
     error NotEnoughEther(uint256 requested, uint256 balance);
     error ZeroAmount();
 
-    constructor(IStakingPool stakingPool) {
-        if (address(stakingPool) == address(0)) {
-            revert StakingPoolZeroAddress();
-        }
-        STAKINGPOOL = stakingPool;
+    function initialize(address addr) public initializer {
+        require(addr != address(0), "INVALID STAKING POOL ADDRESS");
+        STAKING_POOL_PROXY_ADDRESS = addr;
     }
 
     /**
@@ -40,8 +38,8 @@ contract Valut {
      * @dev Can be called only by the StakingPool contract
      * @param _amount amount of ETH to withdraw
      */
-    function withdrawValut(uint256 _amount) external {
-        if (msg.sender != address(STAKINGPOOL)) {
+    function withdrawVault(uint256 _amount) external {
+        if (msg.sender != address(STAKING_POOL_PROXY_ADDRESS)) {
             revert NotStakingPool();
         }
         if (_amount == 0) {
@@ -53,7 +51,7 @@ contract Valut {
             revert NotEnoughEther(_amount, balance);
         }
 
-        STAKINGPOOL.receiveVaultFunds{value: _amount}();
+        IStakingPool(STAKING_POOL_PROXY_ADDRESS).receiveVaultFunds{value: _amount}();
     }
 
     /**
@@ -65,5 +63,9 @@ contract Valut {
 
     function getBalance() external view returns(uint256) {
         return address(this).balance;
+    }
+
+    function getStakingPoolProxyAddress() external view returns(address) {
+        return STAKING_POOL_PROXY_ADDRESS;
     }
 }
