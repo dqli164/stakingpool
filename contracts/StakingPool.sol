@@ -45,11 +45,14 @@ contract StakingPool is Initializable {
 
     // deposit size
     uint256 private constant DEPOSIT_SIZE = 32 ether;
+    uint256 public constant WEI_PER_ETHER = 1e18;
 
     // MainNet: 0x00000000219ab540356cBB839Cbe05303d7705Fa
     // Holesky: 0x4242424242424242424242424242424242424242
     address private DEPOSIT_CONTRACT_ADDRESS;
     address private VAULT_CONTRACT_ADDRESS;
+
+
 
     // The amount of ETH withdrawn from Valut to current contract
     event RewardsReceived(uint256 amount, uint256 timestamp);
@@ -69,6 +72,7 @@ contract StakingPool is Initializable {
     );
     error NotEnoughEtherToDeposit();
     error AccountNotInWhitelist();
+    error TooManyRewards();
 
     function initialize(address depositContractAddress) public initializer {
         owner = msg.sender;
@@ -154,10 +158,13 @@ contract StakingPool is Initializable {
             if (refunds >= DEPOSIT_SIZE) {
                 // refunds + rewards
                 uint256 exitedValidators = refunds / DEPOSIT_SIZE;
-                uint256 rewardFromRefunds = refunds -
+                uint256 rewardsFromRefunds = refunds -
                     exitedValidators *
                     DEPOSIT_SIZE;
-                pool.totalRewards += rewardFromRefunds;
+                if (rewardsFromRefunds > WEI_PER_ETHER) {
+                    revert TooManyRewards();
+                }
+                pool.totalRewards += rewardsFromRefunds;
                 pool.ethToLock -= exitedValidators * DEPOSIT_SIZE; // 减少锁定的ETH数量
             }
             if (refunds > 0 && refunds < DEPOSIT_SIZE) {
@@ -270,7 +277,6 @@ contract StakingPool is Initializable {
     uint256 private LAST_REQUEST_ID_POSITION;
     /// @dev last index of finalized request in the queue
     uint256 private LAST_FINALIZED_REQUEST_ID_POSITION;
-    uint256 public constant WEI_PER_ETHER = 1e18;
 
     error NotEnoughEther();
     error NotEnoughShares();

@@ -342,7 +342,6 @@ contract LidoVoting is IForwarder, AragonApp {
     * @return voteId id for newly created vote
     */
     function _newVote(bytes _executionScript, string _metadata, bool _castVote) internal returns (uint256 voteId) {
-        // TODO: getBlockNumber64()
         uint64 snapshotBlock = getBlockNumber64() - 1; // avoid double voting in this very block
         uint256 votingPower = token.totalSupplyAt(snapshotBlock); // TODO: 这里是怎么知道Token的总供应量的
         require(votingPower > 0, ERROR_NO_VOTING_POWER);
