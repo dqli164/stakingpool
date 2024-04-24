@@ -16,10 +16,13 @@ interface IDepositContract {
 
 contract StakingPool {
     address public owner;
-
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Not Owner");
+        _;
+    }
     // shares
-    mapping (address => uint256) private shares; // 用户的share份额
-    uint256 private totalShares;  // 总的share份额
+    mapping(address => uint256) private shares; // 用户的share份额
+    uint256 private totalShares; // 总的share份额
 
     // pool
     struct Pool {
@@ -34,8 +37,8 @@ contract StakingPool {
     Pool public pool; // 池子
 
     // whitelist
-    bool      private whitelistEnabled; // 是否开启白名单
-    mapping (address => bool) private whitelists; // 仅白名单中的用户可以直接向合约转账
+    bool private whitelistEnabled; // 是否开启白名单
+    mapping(address => bool) private whitelists; // 仅白名单中的用户可以直接向合约转账
 
     bool private depositPaused; // 是否暂停充值
 
@@ -50,7 +53,12 @@ contract StakingPool {
     // The amount of ETH withdrawn from Valut to current contract
     event RewardsReceived(uint256 amount, uint256 timestamp);
 
-    event Deposited(address indexed sender, uint256 amountOfETH, uint256 amountOfShares, uint256 timestamp);
+    event Deposited(
+        address indexed sender,
+        uint256 amountOfETH,
+        uint256 amountOfShares,
+        uint256 timestamp
+    );
     event BeaconChainDepositEvent(
         bytes pubkey,
         bytes withdrawalCredentials,
@@ -59,7 +67,7 @@ contract StakingPool {
         uint256 timestamp
     );
     error NotEnoughEtherToDeposit();
-    error DepositNotInWhitelist();
+    error AccountNotInWhitelist();
 
     function initializer(address depositContractAddress) public {
         owner = msg.sender;
@@ -69,12 +77,15 @@ contract StakingPool {
     /**
      * @notice 用户向池子发送资金进行质押
      */
-    function deposit() external payable returns (uint256)  {
+    function deposit() external payable returns (uint256) {
         require(msg.value > 0, "ZERO_DEPOSIT");
         return _deposit(msg.sender, msg.value);
     }
 
-    function _deposit(address account, uint256 amount) internal returns (uint256)  {
+    function _deposit(address account, uint256 amount)
+        internal
+        returns (uint256)
+    {
         uint256 amountOfShares = _getSharesByETHAmount(amount);
         shares[account] += amountOfShares;
         totalShares += amountOfShares;
@@ -89,17 +100,20 @@ contract StakingPool {
      */
     function activateValidator(
         bytes calldata pubkey,
-        bytes calldata withdrawalCredentials, 
+        bytes calldata withdrawalCredentials,
         bytes calldata signature,
         bytes32 depositDataRoot
     ) external payable {
         require(msg.sender == owner, "AUTH_DENIED");
-        if (_getPoolAvailableFunds() < DEPOSIT_SIZE ) revert NotEnoughEtherToDeposit();
+        if (_getPoolAvailableFunds() < DEPOSIT_SIZE)
+            revert NotEnoughEtherToDeposit();
 
         pool.ethToLock += DEPOSIT_SIZE;
 
-       // 充值
-        IDepositContract DEPOSIT_CONTRACT = IDepositContract(DEPOSIT_CONTRACT_ADDRESS);
+        // 充值
+        IDepositContract DEPOSIT_CONTRACT = IDepositContract(
+            DEPOSIT_CONTRACT_ADDRESS
+        );
         DEPOSIT_CONTRACT.deposit{value: DEPOSIT_SIZE}(
             pubkey,
             withdrawalCredentials,
@@ -121,8 +135,11 @@ contract StakingPool {
         emit RewardsReceived(msg.value, block.timestamp);
     }
 
-    function submitReport(address vaultAddress, uint256 rewards, uint256 refunds) external {
-        require(msg.sender == owner, "AUTH_DENIED");
+    function submitReport(
+        address vaultAddress,
+        uint256 rewards,
+        uint256 refunds
+    ) external onlyOwner {
         // collect funds from vault
         VAULT_CONTRACT_ADDRESS = vaultAddress;
         IVault VAULT_CONTRACT = IVault(vaultAddress);
@@ -132,13 +149,17 @@ contract StakingPool {
             pool.lastRewardTime = block.timestamp;
             pool.totalRewards += rewards; // 增加奖励
 
-            if (refunds >= DEPOSIT_SIZE) { // refunds + rewards
+            if (refunds >= DEPOSIT_SIZE) {
+                // refunds + rewards
                 uint256 exitedValidators = refunds / DEPOSIT_SIZE;
-                uint256 rewardFromRefunds = refunds - exitedValidators * DEPOSIT_SIZE;
+                uint256 rewardFromRefunds = refunds -
+                    exitedValidators *
+                    DEPOSIT_SIZE;
                 pool.totalRewards += rewardFromRefunds;
                 pool.ethToLock -= exitedValidators * DEPOSIT_SIZE; // 减少锁定的ETH数量
             }
-            if (refunds > 0 && refunds < DEPOSIT_SIZE) { // penalty
+            if (refunds > 0 && refunds < DEPOSIT_SIZE) {
+                // penalty
                 uint256 penalty = DEPOSIT_SIZE - refunds;
                 pool.totalLossed += penalty; // 增加损失
                 pool.ethToLock -= DEPOSIT_SIZE; // 减少锁定的ETH数量
@@ -151,23 +172,34 @@ contract StakingPool {
     }
 
     // Calculate the amount of shares backed by an amount of ETH
-    function _getSharesByETHAmount(uint256 ethAmount) internal view returns (uint256) {
+    function _getSharesByETHAmount(uint256 ethAmount)
+        internal
+        view
+        returns (uint256)
+    {
         // Use 1:1 ratio if no shares
-        if (pool.totalDeposited == 0) { 
-            return ethAmount; 
+        if (pool.totalDeposited == 0) {
+            return ethAmount;
         }
-        require(_getTotalETHBalance() > 0, "Cannot calculate shares amount while total deposited balance is zero");
+        require(
+            _getTotalETHBalance() > 0,
+            "Cannot calculate shares amount while total deposited balance is zero"
+        );
         // Calculate and return
-        return ethAmount * totalShares / _getTotalETHBalance();
+        return (ethAmount * totalShares) / _getTotalETHBalance();
     }
 
     // Calculate the amount of eth backed by shares
-    function _getETHAmountByShares(uint256 amountOfShares) internal view returns (uint256) {
-        return amountOfShares * _getTotalETHBalance() / totalShares;
+    function _getETHAmountByShares(uint256 amountOfShares)
+        internal
+        view
+        returns (uint256)
+    {
+        return (amountOfShares * _getTotalETHBalance()) / totalShares;
     }
 
     function _getUserBalance(address account) internal view returns (uint256) {
-        return shares[account] * _getTotalETHBalance() / totalShares;
+        return (shares[account] * _getTotalETHBalance()) / totalShares;
     }
 
     function _getPoolAvailableFunds() internal view returns (uint256) {
@@ -175,13 +207,17 @@ contract StakingPool {
     }
 
     function _getTotalETHBalance() internal view returns (uint256) {
-        return pool.totalDeposited + pool.totalRewards - pool.totalRedeemed - pool.totalLossed;
+        return
+            pool.totalDeposited +
+            pool.totalRewards -
+            pool.totalRedeemed -
+            pool.totalLossed;
     }
 
     function getUserBalance(address account) external view returns (uint256) {
         return _getUserBalance(account);
     }
-    
+
     function getUserShares(address account) external view returns (uint256) {
         return shares[account];
     }
@@ -190,32 +226,35 @@ contract StakingPool {
         return totalShares;
     }
 
-    function enableWhitelist(bool status) external returns (bool) {
-        require(msg.sender == owner, "AUTH_DENIED");
+    function enableWhitelist(bool status) external onlyOwner returns (bool) {
         whitelistEnabled = status;
         return whitelistEnabled;
     }
 
-    function addWhitelist(address account) external {
-        require(msg.sender == owner, "AUTH_DENIED");
+    function addWhitelist(address account) external onlyOwner {
         whitelists[account] = true;
     }
 
-    function deleteWhitelist(address account) external {
-        require(msg.sender == owner, "AUTH_DENIED");
+    function deleteWhitelist(address account) external onlyOwner {
         whitelists[account] = false;
+    }
+
+    function transferOwnership(address newOwner) external onlyOwner {
+        require(newOwner != address(0), "Invalid Owner");
+        owner = newOwner;
     }
 
     receive() external payable {
         if (whitelistEnabled && !whitelists[msg.sender]) {
-            revert DepositNotInWhitelist();
+            revert AccountNotInWhitelist();
         }
         _deposit(msg.sender, msg.value);
     }
 
     /******** WithdrawQueue ********/
     /// @dev queue for withdrawal requests, indexes (requestId) start from 1
-    bytes32 internal constant QUEUE_POSITION = keccak256("WithdrawalQueue.queue");
+    bytes32 internal constant QUEUE_POSITION =
+        keccak256("WithdrawalQueue.queue");
     /// @dev last index in request queue
     uint256 private LAST_REQUEST_ID_POSITION;
     /// @dev last index of finalized request in the queue
@@ -237,21 +276,21 @@ contract StakingPool {
     );
 
     event WithdrawalsFinalized(
-        uint256 indexed from, 
-        uint256 indexed to, 
+        uint256 indexed from,
+        uint256 indexed to,
         uint256 amount,
         uint256 timestamp
     );
 
     event WithdrawalClaimed(
-        uint256 indexed requestId, 
-        address indexed owner, 
+        uint256 indexed requestId,
+        address indexed owner,
         uint256 amount
     );
 
     event NotEnoughEtherToRedeem(
-        uint256 indexed requestId, 
-        address indexed owner, 
+        uint256 indexed requestId,
+        address indexed owner,
         uint256 amount,
         uint256 timestamp
     );
@@ -271,7 +310,11 @@ contract StakingPool {
         bool isClaimed;
     }
 
-    function _getQueue() internal pure returns (mapping(uint256 => WithdrawalRequest) storage queue) {
+    function _getQueue()
+        internal
+        pure
+        returns (mapping(uint256 => WithdrawalRequest) storage queue)
+    {
         bytes32 position = QUEUE_POSITION;
         assembly {
             queue.slot := position
@@ -289,8 +332,13 @@ contract StakingPool {
         }
     }
 
-    function _getStatus(uint256 _requestId) internal view returns (WithdrawalRequestStatus memory status) {
-        if (_requestId == 0 || _requestId > getLastRequestId()) revert InvalidRequestId(_requestId);
+    function _getStatus(uint256 _requestId)
+        internal
+        view
+        returns (WithdrawalRequestStatus memory status)
+    {
+        if (_requestId == 0 || _requestId > getLastRequestId())
+            revert InvalidRequestId(_requestId);
         WithdrawalRequest memory request = _getQueue()[_requestId];
         status = WithdrawalRequestStatus(
             request.amount,
@@ -301,7 +349,7 @@ contract StakingPool {
         );
     }
 
-    function _finalize() internal returns (uint256 ethToMeetWithdraw){
+    function _finalize() internal returns (uint256 ethToMeetWithdraw) {
         uint256 currentBatchIndex = 1;
         uint256 lastFinalizedRequestId = getLastFinalizedRequestId();
         while (ethToMeetWithdraw <= _getPoolAvailableFunds()) {
@@ -313,24 +361,39 @@ contract StakingPool {
             // if (request.timestamp < block.timestamp + 24 * 60 * 60) { // 发起提款24h后的请求才能被确认
             //     break;
             // }
-            if (ethToMeetWithdraw + request.amount >_getPoolAvailableFunds()) {
-                emit NotEnoughEtherToRedeem(requestId, request.owner, request.amount, block.timestamp);
+            if (ethToMeetWithdraw + request.amount > _getPoolAvailableFunds()) {
+                emit NotEnoughEtherToRedeem(
+                    requestId,
+                    request.owner,
+                    request.amount,
+                    block.timestamp
+                );
                 break;
             }
             ethToMeetWithdraw += request.amount;
             _setLastFinalizedRequestId(requestId);
-            emit WithdrawalsFinalized(requestId - 1, requestId, request.amount, block.timestamp);
+            emit WithdrawalsFinalized(
+                requestId - 1,
+                requestId,
+                request.amount,
+                block.timestamp
+            );
 
-            unchecked{ ++currentBatchIndex; }
+            unchecked {
+                ++currentBatchIndex;
+            }
         }
     }
 
-    function _enqueue(uint256 amountOfETH, address _owner) internal returns (uint256 requestId) {
+    function _enqueue(uint256 amountOfETH, address _owner)
+        internal
+        returns (uint256 requestId)
+    {
         uint256 lastRequestId = getLastRequestId();
         requestId = lastRequestId + 1;
         _setLastRequestId(requestId);
 
-        WithdrawalRequest memory newRequest =  WithdrawalRequest(
+        WithdrawalRequest memory newRequest = WithdrawalRequest(
             amountOfETH,
             _owner,
             uint40(block.timestamp),
@@ -343,12 +406,15 @@ contract StakingPool {
     }
 
     function getClaimableEther(uint256 _requestId) external {
-        if (_requestId == 0 || _requestId > getLastRequestId()) revert InvalidRequestId(_requestId);
+        if (_requestId == 0 || _requestId > getLastRequestId())
+            revert InvalidRequestId(_requestId);
 
-        if (_requestId > getLastFinalizedRequestId()) revert RequestNotFoundOrNotFinalized(_requestId);
+        if (_requestId > getLastFinalizedRequestId())
+            revert RequestNotFoundOrNotFinalized(_requestId);
 
         WithdrawalRequest storage request = _getQueue()[_requestId];
-        if (request.owner != msg.sender) revert NotOwner(msg.sender, request.owner);
+        if (request.owner != msg.sender)
+            revert NotOwner(msg.sender, request.owner);
         if (request.claimed) revert RequestAlreadyClaimed(_requestId);
 
         request.claimed = true;
@@ -359,13 +425,21 @@ contract StakingPool {
     /*
      * 打钱给提款人
      **/
-    function _sendValue(uint256 _requestId, address recipient, uint256 amountOfETH) internal {
-        (bool success,) = recipient.call{value: amountOfETH}("");
+    function _sendValue(
+        uint256 _requestId,
+        address recipient,
+        uint256 amountOfETH
+    ) internal {
+        (bool success, ) = recipient.call{value: amountOfETH}("");
         if (!success) revert CantSendValueRecipientMayHaveReverted();
         emit WithdrawalClaimed(_requestId, recipient, amountOfETH);
     }
 
-    function requestWithdrawal(uint256 amountOfETH) external payable returns (uint256 requestId) {
+    function requestWithdrawal(uint256 amountOfETH)
+        external
+        payable
+        returns (uint256 requestId)
+    {
         if (amountOfETH > _getUserBalance(msg.sender)) {
             revert NotEnoughEther();
         }
@@ -375,11 +449,12 @@ contract StakingPool {
         totalShares -= amountOfShares;
         pool.totalRedeemed += amountOfETH;
 
-        if (_getPoolAvailableFunds() >= amountOfETH) { // 钱足够直接打给取款人,钱不够则放到提款队列中
+        if (_getPoolAvailableFunds() >= amountOfETH) {
+            // 钱足够直接打给取款人,钱不够则放到提款队列中
             // 打款(一定要先减掉用户份额后再打款)
             _sendValue(0, msg.sender, amountOfETH);
             return 0;
-        }                                                                                 
+        }
 
         requestId = _enqueue(amountOfETH, msg.sender);
         return requestId;
@@ -397,7 +472,9 @@ contract StakingPool {
         return LAST_FINALIZED_REQUEST_ID_POSITION;
     }
 
-    function _setLastFinalizedRequestId(uint256 _lastFinalizedRequestId) internal {
+    function _setLastFinalizedRequestId(uint256 _lastFinalizedRequestId)
+        internal
+    {
         LAST_FINALIZED_REQUEST_ID_POSITION = _lastFinalizedRequestId;
     }
 }
