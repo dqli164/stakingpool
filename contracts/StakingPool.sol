@@ -18,7 +18,7 @@ interface IDepositContract {
 contract StakingPool is Initializable {
     address public owner;
     modifier onlyOwner() {
-        require(msg.sender == owner, "Not Owner");
+        require(msg.sender == owner, "NOT OWNER");
         _;
     }
     // shares
@@ -48,8 +48,8 @@ contract StakingPool is Initializable {
 
     // MainNet: 0x00000000219ab540356cBB839Cbe05303d7705Fa
     // Holesky: 0x4242424242424242424242424242424242424242
-    address DEPOSIT_CONTRACT_ADDRESS;
-    address VAULT_CONTRACT_ADDRESS;
+    address private DEPOSIT_CONTRACT_ADDRESS;
+    address private VAULT_CONTRACT_ADDRESS;
 
     // The amount of ETH withdrawn from Valut to current contract
     event RewardsReceived(uint256 amount, uint256 timestamp);
@@ -111,6 +111,7 @@ contract StakingPool is Initializable {
         pool.ethToLock += DEPOSIT_SIZE;
 
         // 充值
+        require(DEPOSIT_CONTRACT_ADDRESS != address(0), "INVALID DEPOSIT CONTRACT ADDRESS");
         IDepositContract DEPOSIT_CONTRACT = IDepositContract(
             DEPOSIT_CONTRACT_ADDRESS
         );
@@ -131,7 +132,7 @@ contract StakingPool is Initializable {
     }
 
     function receiveVaultFunds() external payable {
-        require(msg.sender == VAULT_CONTRACT_ADDRESS, "Not Vault");
+        require(msg.sender == VAULT_CONTRACT_ADDRESS, "NOT VAULT");
         emit RewardsReceived(msg.value, block.timestamp);
     }
 
@@ -140,6 +141,7 @@ contract StakingPool is Initializable {
         uint256 rewards,
         uint256 refunds
     ) external onlyOwner {
+        require(vaultAddress != address(0), "INVALID VAULT ADDRESS");
         // collect funds from vault
         VAULT_CONTRACT_ADDRESS = vaultAddress;
         IVault VAULT_CONTRACT = IVault(vaultAddress);
@@ -240,12 +242,8 @@ contract StakingPool is Initializable {
     }
 
     function transferOwnership(address newOwner) external onlyOwner {
-        require(newOwner != address(0), "Invalid New Owner");
+        require(newOwner != address(0), "INVALID OWNER");
         owner = newOwner;
-    }
-
-    function getOwner() external view returns (address) {
-        return owner;
     }
 
     receive() external payable {
@@ -263,6 +261,7 @@ contract StakingPool is Initializable {
     uint256 private LAST_REQUEST_ID_POSITION;
     /// @dev last index of finalized request in the queue
     uint256 private LAST_FINALIZED_REQUEST_ID_POSITION;
+    uint256 public constant WEI_PER_ETHER = 1e18;
 
     error NotEnoughEther();
     error NotEnoughShares();
