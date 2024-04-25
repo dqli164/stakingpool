@@ -1,7 +1,7 @@
 import { ethers, upgrades } from "hardhat";
 
-const proxyAddress = '0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0'
-const votingAddress = '0x9A676e781A523b5d0C0e43731313A708CB607508'
+const proxyAddress = '0x2724f24aeC3E782b98b2106d83FF046662BC107E'
+const votingAddress = '0xbF1e525aA16e61Be7Fe853abd30BDE5cc4B315b4'
 console.log('PROXY_ADDRESS: ', proxyAddress)
 console.log('VOTING_ADDRESS: ', votingAddress)
 

@@ -1,7 +1,7 @@
 import { ethers } from "hardhat";
 import { upgrades } from "hardhat";
 
-const proxyAddress = '0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0'
+const proxyAddress = '0x2724f24aeC3E782b98b2106d83FF046662BC107E'
 
 async function main() {
   console.log(proxyAddress," original StakingPool(proxy) address")

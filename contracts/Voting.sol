@@ -172,8 +172,8 @@ contract Voting  is Initializable {
     * @param _metadata Vote metadata
     * @return voteId Id for newly created vote
     */
-    function newVote(address shareAddress, address proxyAddress, address proxyAdminAddress, address implementationAddress, string memory _metadata) external onlyOwner returns (uint256 voteId) {
-        return _newVote(shareAddress, proxyAddress, proxyAdminAddress, implementationAddress, _metadata, false);
+    function newVote(address proxyAddress, address proxyAdminAddress, address implementationAddress, string memory _metadata) external onlyOwner returns (uint256 voteId) {
+        return _newVote(proxyAddress, proxyAdminAddress, implementationAddress, _metadata, false);
     }
 
     /**
@@ -183,11 +183,11 @@ contract Voting  is Initializable {
     * @param _castVote Whether to also cast newly created vote
     * @return voteId id for newly created vote
     */
-    function newVote(address shareAddress, address proxyAddress, address proxyAdminAddress, address implementationAddress, string memory _metadata, bool _castVote)
+    function newVote(address proxyAddress, address proxyAdminAddress, address implementationAddress, string memory _metadata, bool _castVote)
         external onlyOwner
         returns (uint256 voteId)
     {
-        return _newVote(shareAddress, proxyAddress, proxyAdminAddress, implementationAddress, _metadata, _castVote);
+        return _newVote(proxyAddress, proxyAdminAddress, implementationAddress, _metadata, _castVote);
     }
 
     /**
@@ -264,7 +264,10 @@ contract Voting  is Initializable {
             uint256 yea,
             uint256 nay,
             uint256 votingPower,
-            VotePhase phase
+            VotePhase phase,
+            address proxyAddress,
+            address proxyAdminAddress,
+            address implementationAddress
         )
     {
         Vote storage vote_ = votes[_voteId];
@@ -278,6 +281,9 @@ contract Voting  is Initializable {
         nay = vote_.nay;
         votingPower = vote_.votingPower;
         phase = _getVotePhase(vote_);
+        proxyAddress = vote_.proxyAddress;
+        proxyAdminAddress = vote_.proxyAdminAddress;
+        implementationAddress = vote_.implementationAddress;
     }
 
     /**
@@ -294,8 +300,8 @@ contract Voting  is Initializable {
     * @dev Internal function to create a new vote
     * @return voteId id for newly created vote
     */
-    function _newVote(address shareAddress, address proxyAddress, address proxyAdminAddress, address implementationAddress, string memory _metadata, bool _castVote) internal returns (uint256 voteId) {
-        uint256 votingPower = IStakingPool(shareAddress).getTotalShares();
+    function _newVote(address proxyAddress, address proxyAdminAddress, address implementationAddress, string memory _metadata, bool _castVote) internal returns (uint256 voteId) {
+        uint256 votingPower = IStakingPool(STAKING_POOL_PROXY_ADDRESS).getTotalShares();
         require(votingPower > 0, ERROR_NO_VOTING_POWER);
 
         voteId = votesLength++;

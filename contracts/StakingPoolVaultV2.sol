@@ -3,7 +3,7 @@ pragma solidity ^0.8.4;
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
 interface IVault {
-    function withdrawValut(uint256 amount) external;
+    function withdrawVault(uint256 amount) external;
 }
 
 interface IDepositContract {
@@ -16,7 +16,7 @@ interface IDepositContract {
 }
 
 contract StakingPoolV2 is Initializable {
-    address public owner;
+    address private owner;
     modifier onlyOwner() {
         require(msg.sender == owner, "NOT OWNER");
         _;
@@ -45,7 +45,7 @@ contract StakingPoolV2 is Initializable {
 
     // deposit size
     uint256 private constant DEPOSIT_SIZE = 32 ether;
-    uint256 public constant WEI_PER_ETHER = 1e18;
+    uint256 private constant WEI_PER_ETHER = 1e18;
 
     // MainNet: 0x00000000219ab540356cBB839Cbe05303d7705Fa
     // Holesky: 0x4242424242424242424242424242424242424242
@@ -138,6 +138,10 @@ contract StakingPoolV2 is Initializable {
         emit RewardsReceived(msg.value, block.timestamp);
     }
 
+    function testUpgrade() external pure returns(uint256) {
+        return 1000;
+    }
+
     function submitReport(
         address vaultAddress,
         uint256 rewards,
@@ -146,19 +150,15 @@ contract StakingPoolV2 is Initializable {
         require(vaultAddress != address(0), "INVALID VAULT ADDRESS");
         // collect funds from vault
         VAULT_CONTRACT_ADDRESS = vaultAddress;
-        IVault VAULT_CONTRACT = IVault(vaultAddress);
 
         if (rewards + refunds > 0) {
-            VAULT_CONTRACT.withdrawValut(rewards + refunds); // 提取资金
+            IVault(vaultAddress).withdrawVault(rewards + refunds); // 提取资金
             pool.lastRewardTime = block.timestamp;
             pool.totalRewards += rewards; // 增加奖励
 
             if (refunds >= DEPOSIT_SIZE) {
-                // refunds + rewards
                 uint256 exitedValidators = refunds / DEPOSIT_SIZE;
-                uint256 rewardsFromRefunds = refunds -
-                    exitedValidators *
-                    DEPOSIT_SIZE;
+                uint256 rewardsFromRefunds = refunds - exitedValidators * DEPOSIT_SIZE;
                 if (rewardsFromRefunds > WEI_PER_ETHER) {
                     revert TooManyRewards();
                 }
@@ -251,6 +251,10 @@ contract StakingPoolV2 is Initializable {
         owner = newOwner;
     }
 
+    function getOwner() external view returns (address) {
+        return owner;
+    }
+
     function getBeaconChainDepositAddress() external view returns (address) {
         return DEPOSIT_CONTRACT_ADDRESS;
     }
@@ -258,10 +262,6 @@ contract StakingPoolV2 is Initializable {
     function setBeaconChainDepositAddress(address depositAddress) external onlyOwner {
         require(depositAddress != address(0), "INVALID BEACON CHAIN ADDRESS");
         DEPOSIT_CONTRACT_ADDRESS = depositAddress;
-    }
-
-    function returnNumber() external pure returns (uint256) {
-        return 100;
     }
 
     receive() external payable {
