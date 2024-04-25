@@ -3,7 +3,7 @@ pragma solidity ^0.8.4;
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
 interface IVault {
-    function withdrawValut(uint256 amount) external;
+    function withdrawVault(uint256 amount) external;
 }
 
 interface IDepositContract {
@@ -146,19 +146,15 @@ contract StakingPool is Initializable {
         require(vaultAddress != address(0), "INVALID VAULT ADDRESS");
         // collect funds from vault
         VAULT_CONTRACT_ADDRESS = vaultAddress;
-        IVault VAULT_CONTRACT = IVault(vaultAddress);
 
         if (rewards + refunds > 0) {
-            VAULT_CONTRACT.withdrawValut(rewards + refunds); // 提取资金
+            IVault(vaultAddress).withdrawVault(rewards + refunds); // 提取资金
             pool.lastRewardTime = block.timestamp;
             pool.totalRewards += rewards; // 增加奖励
 
             if (refunds >= DEPOSIT_SIZE) {
-                // refunds + rewards
                 uint256 exitedValidators = refunds / DEPOSIT_SIZE;
-                uint256 rewardsFromRefunds = refunds -
-                    exitedValidators *
-                    DEPOSIT_SIZE;
+                uint256 rewardsFromRefunds = refunds - exitedValidators * DEPOSIT_SIZE;
                 if (rewardsFromRefunds > WEI_PER_ETHER) {
                     revert TooManyRewards();
                 }
