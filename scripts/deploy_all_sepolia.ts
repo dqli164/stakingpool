@@ -6,13 +6,14 @@ async function main() {
   // holesky: 0x4242424242424242424242424242424242424242
   const stakingPool = await upgrades.deployProxy(StakingPool,['0x4242424242424242424242424242424242424242'], { initializer: 'initialize' })
   console.log(await stakingPool.getAddress()," StakingPool(proxy) address")
+  const stakingPoolAddress = await stakingPool.getAddress()
   // console.log(await upgrades.erc1967.getImplementationAddress(await stakingPool.getAddress())," getImplementationAddress")
   // console.log(await upgrades.erc1967.getAdminAddress(await stakingPool.getAddress())," getAdminAddress")
 
   // deploy vault
   const Vault = await ethers.getContractFactory("Vault")
   console.log("Deploying Vault...")
-  const vault = await upgrades.deployProxy(Vault,[await stakingPool.getAddress()], { initializer: 'initialize' })
+  const vault = await upgrades.deployProxy(Vault,[stakingPoolAddress], { initializer: 'initialize' })
   console.log(await vault.getAddress()," Vault(proxy) address")
 
   const Voting = await ethers.getContractFactory("Voting")

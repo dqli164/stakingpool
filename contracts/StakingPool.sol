@@ -16,7 +16,7 @@ interface IDepositContract {
 }
 
 contract StakingPool is Initializable {
-    address public owner;
+    address private owner;
     modifier onlyOwner() {
         require(msg.sender == owner, "NOT OWNER");
         _;
@@ -45,14 +45,12 @@ contract StakingPool is Initializable {
 
     // deposit size
     uint256 private constant DEPOSIT_SIZE = 32 ether;
-    uint256 public constant WEI_PER_ETHER = 1e18;
+    uint256 private constant WEI_PER_ETHER = 1e18;
 
     // MainNet: 0x00000000219ab540356cBB839Cbe05303d7705Fa
     // Holesky: 0x4242424242424242424242424242424242424242
     address private DEPOSIT_CONTRACT_ADDRESS;
     address private VAULT_CONTRACT_ADDRESS;
-
-
 
     // The amount of ETH withdrawn from Valut to current contract
     event RewardsReceived(uint256 amount, uint256 timestamp);
@@ -251,6 +249,10 @@ contract StakingPool is Initializable {
     function transferOwnership(address newOwner) external onlyOwner {
         require(newOwner != address(0), "INVALID OWNER");
         owner = newOwner;
+    }
+
+    function getOwner() external view returns (address) {
+        return owner;
     }
 
     function getBeaconChainDepositAddress() external view returns (address) {

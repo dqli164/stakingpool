@@ -101,6 +101,10 @@ contract Voting  is Initializable {
         owner = newOwner;
     }
 
+    function getOwner() external view returns (address) {
+        return owner;
+    }
+
     function setStakingPoolProxyAddress(address addr) external onlyOwner {
         require(addr != address(0), "INVALID ADDRESS");
         STAKING_POOL_PROXY_ADDRESS = addr;
